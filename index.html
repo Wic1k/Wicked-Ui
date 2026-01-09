@@ -2,42 +2,39 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8" />
-<title>Кролики — зажимай и смотри как валятся</title>
+<title>Кролики — падают и остаются</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <style>
   body {
     margin: 0;
     overflow: hidden;
-    background: linear-gradient(to bottom, #0a0015, #1a0033);
-    font-family: system-ui, sans-serif;
+    background: #000;
     touch-action: none;
   }
   canvas {
     position: absolute;
     top: 0; left: 0;
+    display: block;
   }
   #ui {
     position: absolute;
-    top: 12px;
-    left: 12px;
-    background: rgba(0,0,0,0.65);
-    backdrop-filter: blur(8px);
-    padding: 12px 18px;
-    border-radius: 12px;
-    color: #0ff;
-    z-index: 100;
+    top: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 10px 16px;
+    border-radius: 8px;
+    color: #0f8;
+    z-index: 10;
     pointer-events: none;
-    user-select: none;
+    font-family: Arial, sans-serif;
   }
   #counter {
     font-size: 2.8rem;
-    font-weight: 900;
-    color: #ffeb3b;
-    text-shadow: 0 0 10px #ffeb3b66;
+    font-weight: bold;
   }
   #fps {
-    font-size: 1.4rem;
-    opacity: 0.9;
+    font-size: 1.3rem;
+    margin-top: 4px;
   }
 </style>
 </head>
@@ -45,26 +42,25 @@
 
 <div id="ui">
   <div>КРОЛИКОВ: <span id="counter">0</span></div>
-  <div>FPS: <span id="fps">—</span></div>
-  <div style="font-size:0.9rem; opacity:0.7; margin-top:6px;">
-    Зажми а то кролики хуй
-  </div>
+  <div id="fps">FPS: —</div>
 </div>
 
 <canvas id="c"></canvas>
 
 <script>
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-const counterEl = document.getElementById('counter');
+const ctx = canvas.getContext('2d', { alpha: false });
+const counter = document.getElementById('counter');
 const fpsEl = document.getElementById('fps');
 
 let w, h;
 let rabbits = [];
 let isPressed = false;
-let lastTime = 0;
+let lastTime = performance.now();
 let frameCount = 0;
+let fpsTime = performance.now();
 let fps = 0;
+let lastSpawnTime = 0;
 
 function resize() {
   w = canvas.width = window.innerWidth;
@@ -72,137 +68,105 @@ function resize() {
 }
 
 class Rabbit {
-  constructor(x, y) {
+  constructor(x) {
     this.x = x;
-    this.y = y;
-    this.vx = (Math.random() - 0.5) * 5;
-    this.vy = -8 - Math.random() * 12; // вверх при спавне
-    this.gravity = 0.65;
-    this.size = 22 + Math.random() * 10;
-    this.rotation = Math.random() * Math.PI * 2;
-    this.rotSpeed = (Math.random() - 0.5) * 0.25;
-    this.onGround = false;
+    this.y = -40;
+    this.speed = 14 + Math.random() * 10;
+    this.size = 22 + Math.random() * 14;
+    this.stopped = false;
   }
 
   update() {
-    if (this.onGround) {
-      this.vy = 0;
-      this.vx *= 0.92; // трение
-      if (Math.abs(this.vx) < 0.1) this.vx = 0;
-      return;
-    }
-
-    this.vy += this.gravity;
-    this.x += this.vx;
-    this.y += this.vy;
-    this.rotation += this.rotSpeed;
-
-    // Пол
-    if (this.y > h - this.size * 0.6) {
+    if (this.stopped) return;
+    
+    this.y += this.speed;
+    
+    if (this.y >= h - this.size * 0.6) {
       this.y = h - this.size * 0.6;
-      this.vy = -this.vy * 0.38; // отскок вверх слабый
-      this.vx *= 0.8;
-
-      if (Math.abs(this.vy) < 2) {
-        this.onGround = true;
-        this.vy = 0;
-      }
+      this.stopped = true;
     }
-
-    // Стены (чтобы не убегали)
-    if (this.x < 0 || this.x > w) this.vx *= -0.7;
   }
 
-  draw() {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.rotation);
-
-    // тень под кроликом
-    if (!this.onGround) {
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.beginPath();
-      ctx.ellipse(0, 20, this.size * 0.9, 8, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.font = this.size + 'px Arial';
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🐰', 0, 0);
-
-    ctx.restore();
+  draw(ctx) {
+    ctx.font = Math.round(this.size) + 'px Arial';
+    ctx.fillText('🐰', this.x, this.y);
   }
 }
 
-function spawnAt(x, y, count = 6) {
-  for (let i = 0; i < count; i++) {
-    let offsetX = (Math.random() - 0.5) * 60;
-    let offsetY = (Math.random() - 0.5) * 40;
-    rabbits.push(new Rabbit(x + offsetX, y + offsetY));
+function spawn(x, count = 10) {
+  for(let i = 0; i < count; i++) {
+    let offset = (Math.random() - 0.5) * 140;
+    rabbits.push(new Rabbit(x + offset));
   }
-  counterEl.textContent = rabbits.length;
+  counter.textContent = rabbits.length;
 }
 
-function loop(time = 0) {
-  const delta = time - lastTime;
-  lastTime = time;
+function loop() {
+  const now = performance.now();
 
-  frameCount++;
-  if (frameCount % 10 === 0) {
-    fps = Math.round(1000 / delta);
-    fpsEl.textContent = fps;
+  // Если зажато - спауним каждые 50мс
+  if (isPressed && now - lastSpawnTime > 50) {
+    const x = window.lastX !== undefined ? window.lastX : w / 2;
+    spawn(x, 12);
+    lastSpawnTime = now;
   }
 
-  // мягкий трейл
-  ctx.fillStyle = 'rgba(10,0,20,0.08)';
+  // Полная очистка вместо полупрозрачного прямоугольника
+  ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, w, h);
 
-  rabbits.forEach(r => {
-    r.update();
-    r.draw();
-  });
+  // Обновление и отрисовка
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < rabbits.length; i++) {
+    rabbits[i].update();
+    rabbits[i].draw(ctx);
+  }
+
+  // FPS счётчик
+  frameCount++;
+  if (now - fpsTime >= 1000) {
+    fps = frameCount;
+    fpsEl.textContent = `FPS: ${fps} | Кроликов: ${rabbits.length}`;
+    frameCount = 0;
+    fpsTime = now;
+  }
 
   requestAnimationFrame(loop);
 }
 
-// Управление зажатием
-function handleStart(e) {
+function start(e) {
   e.preventDefault();
   isPressed = true;
-
-  const touch = e.touches ? e.touches[0] : e;
-  spawnAt(touch.clientX, touch.clientY, 8);
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  window.lastX = x;
+  lastSpawnTime = performance.now();
+  spawn(x, 12);
 }
 
-function handleMove(e) {
+function move(e) {
   e.preventDefault();
   if (!isPressed) return;
-
-  const touch = e.touches ? e.touches[0] : e;
-  spawnAt(touch.clientX, touch.clientY, 5); // меньше, чтобы не перегрузить сразу
+  const x = e.touches ? e.touches[0].clientX : e.clientX;
+  window.lastX = x;
 }
 
-function handleEnd() {
+function end() {
   isPressed = false;
 }
 
-// События
-canvas.addEventListener('mousedown', handleStart);
-canvas.addEventListener('mousemove', handleMove);
-canvas.addEventListener('mouseup', handleEnd);
-canvas.addEventListener('mouseleave', handleEnd);
+canvas.addEventListener('mousedown', start);
+canvas.addEventListener('mousemove', move);
+canvas.addEventListener('mouseup', end);
+canvas.addEventListener('mouseleave', end);
 
-canvas.addEventListener('touchstart', handleStart);
-canvas.addEventListener('touchmove', handleMove);
-canvas.addEventListener('touchend', handleEnd);
-canvas.addEventListener('touchcancel', handleEnd);
+canvas.addEventListener('touchstart', start);
+canvas.addEventListener('touchmove', move);
+canvas.addEventListener('touchend', end);
+canvas.addEventListener('touchcancel', end);
 
 window.addEventListener('resize', resize);
 resize();
 
-// Запуск цикла
 requestAnimationFrame(loop);
 </script>
 </body>
